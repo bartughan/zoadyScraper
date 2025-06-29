@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+praw
+requests
+beautifulsoup4
+selenium
+xlsxwriter 
