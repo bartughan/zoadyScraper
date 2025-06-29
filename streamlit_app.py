@@ -15,24 +15,24 @@ tab = st.sidebar.radio("Platform Seçin", TABS)
 
 if tab == "Reddit":
     st.header("Reddit Subreddit Scraper")
-    # Reddit API credentials
-    st.subheader("Reddit API Bilgileri")
-    client_id = st.text_input("Client ID", type="default")
-    client_secret = st.text_input("Client Secret", type="password")
-    user_agent = st.text_input("User Agent", value="streamlit_app")
-    creds_ready = all([client_id, client_secret, user_agent])
-    if creds_ready:
-        # Save credentials to config file for session use
-        reddit_config = {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "user_agent": user_agent
-        }
-        config_path = os.path.join("Reddit", "reddit_config.json")
-        with open(config_path, "w") as f:
-            json.dump(reddit_config, f)
-    else:
-        st.info("Lütfen Reddit API bilgilerinizi girin.")
+    # Reddit API credentials from Streamlit secrets
+    creds_ready = False
+    if hasattr(st, 'secrets') and 'reddit' in st.secrets:
+        reddit_config = st.secrets["reddit"]
+        client_id = reddit_config.get("client_id", "")
+        client_secret = reddit_config.get("client_secret", "")
+        user_agent = reddit_config.get("user_agent", "")
+        creds_ready = all([client_id, client_secret, user_agent])
+        if creds_ready:
+            config_path = os.path.join("Reddit", "reddit_config.json")
+            with open(config_path, "w") as f:
+                json.dump({
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "user_agent": user_agent
+                }, f)
+    if not creds_ready:
+        st.error("Streamlit secrets dosyanızda reddit API bilgileri eksik!")
     keyword = st.text_input("Anahtar Kelime", "gaming")
     min_subs = st.number_input("Minimum Abone Sayısı", min_value=-1, value=-1)
     max_subs = st.number_input("Maksimum Abone Sayısı", min_value=-1, value=-1)
