@@ -6,6 +6,7 @@ from io import BytesIO
 from Discord.discord_server_scraper import scrape_discordservers
 from Reddit.subreddit_scraper import fetch_all_subreddits, filter_subreddit, get_subreddit_data
 from Reddit.main import get_online_users_requests
+import xlsxwriter
 
 st.set_page_config(page_title="Reddit & Discord Scraper", layout="wide")
 st.title("Reddit & Discord Scraper")
@@ -17,6 +18,7 @@ if tab == "Reddit":
     st.header("Reddit Subreddit Scraper")
     # Reddit API credentials from Streamlit secrets
     creds_ready = False
+    debug_msgs = []
     if hasattr(st, 'secrets') and 'reddit' in st.secrets:
         reddit_config = st.secrets["reddit"]
         client_id = reddit_config.get("client_id", "")
@@ -53,8 +55,20 @@ if tab == "Reddit":
                         break
                     if filter_subreddit(sub, keyword, min_subs, max_subs, max_age_days, debug=debug):
                         row = get_subreddit_data(sub, debug=debug)
-                        online_users = get_online_users_requests(row['Link'])
-                        row['Online Users'] = online_users
+                        # Online Users: Önce API'den, yoksa HTML'den
+                        online_users = None
+                        try:
+                            online_users = getattr(sub, 'active_user_count', None)
+                            if online_users is None:
+                                online_users = getattr(sub, 'accounts_active', None)
+                            if online_users is None:
+                                online_users = get_online_users_requests(row['Link'])
+                                if not online_users:
+                                    debug_msgs.append(f"[WARN] Online users bulunamadı: {row['Link']}")
+                        except Exception as e:
+                            debug_msgs.append(f"[ERROR] Online users çekilemedi: {row['Link']} - {e}")
+                            online_users = ''
+                        row['Online Users'] = online_users if online_users is not None else ''
                         try:
                             total = int(row['Total Users'])
                             online = int(online_users) if online_users else 0
@@ -67,12 +81,27 @@ if tab == "Reddit":
                 if rows:
                     df = pd.DataFrame(rows)
                     st.dataframe(df)
+                    # xlsxwriter ile Excel çıktısı (tıklanabilir link)
                     output = BytesIO()
-                    df.to_excel(output, index=False, engine='openpyxl')
+                    workbook = xlsxwriter.Workbook(output)
+                    worksheet = workbook.add_worksheet()
+                    for col, name in enumerate(fieldnames):
+                        worksheet.write(0, col, name)
+                    for row_idx, row in enumerate(rows, 1):
+                        for col, key in enumerate(fieldnames):
+                            if key == 'Link' and row.get('Link'):
+                                worksheet.write_url(row_idx, col, row['Link'], string=row['Link'])
+                            else:
+                                worksheet.write(row_idx, col, row.get(key, ''))
+                    workbook.close()
                     output.seek(0)
                     st.download_button("Excel Olarak İndir", output, file_name="reddit_subs.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 else:
                     st.warning("Hiçbir subreddit bulunamadı.")
+                if debug or debug_msgs:
+                    st.subheader("Debug / Hata Mesajları")
+                    for msg in debug_msgs:
+                        st.write(msg)
 
 elif tab == "Discord":
     st.header("Discord Sunucu Scraper")
